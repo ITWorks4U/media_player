@@ -1,0 +1,45 @@
+###########################
+#	Custom media player
+###########################
+version	0.0.x.y
+-	initial setup
+-	created own logging handling
+-	created first prototype for playing music
+-	added signal handling for SIGINT and also SIGTERM
+
+version 0.1.x.y
+-	dpending on the used OS some special modules are required
+-	if the module can't be found a help function print_to_stdout is called
+
+version 0.2.x.y
+-	added help functions for Windows, when an USB device has suddenly
+	been detached during playing
+-	requesting each 500ms, if the current music is no longer played and
+	check, if the USB device has suddenly been detached
+
+version 0.3.x.y
+-	created >>this<< changelog and also a version.ini (better later than never °(^.^) )
+-	if the application comes with an argument of -h | --help | /? a help is going to
+	print instead and the application terminated with 0
+
+version 0.4.x.y
+-	using a config file instead of using the arguments
+-	arguments can still be used for requesting help, creating a new config file or using an
+	own config file
+-	converted MediaPlayer class into a dataclass
+-	removed obsolete arguments in method calls
+-	writing to log is available only, if the log path is given and valid
+-	cleaned up the project folder
+
+###########################
+#	ideas in the future
+###########################
+-	detection of a detached USB device shall be handled as an own thread,
+	because during runtime a music file can still be played when the USB device
+	has already been removed
+
+-	offering to set the volume
+
+-	offering to remote control by MQTT
+
+-	create unit tests
