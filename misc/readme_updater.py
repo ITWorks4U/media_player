@@ -47,8 +47,7 @@ def update_readme(new_version: str) -> None:
 | module | version | additional informations |
 | - | - | - |
 | pygame | 2.1.6 (current) | basic module to offer to play mp3 files |
-| WMI | 1.5.1 | (Windows only) in use to collect any plugged USB device during runtime as well as if the USB drive has been unplugged |
-> If one of these modules is missing, a common message is going to print to the console / terminal. The application, however, can still be used, but not fully used.
+> If this module is missing, then the player can't be used and the application terminates with error code 1.
 
 ### 3.  how to run
 -   minimal usage: ```python[3.exe] main.py```
