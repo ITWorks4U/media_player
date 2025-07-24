@@ -1,2 +1,8 @@
 #	ignoring python cache
 __pycache__/
+
+#	ignoring the created log file
+media_player.log
+
+#	ignore that file
+todo.txt

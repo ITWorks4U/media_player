@@ -8,7 +8,7 @@ version	0.0.x.y
 -	added signal handling for SIGINT and also SIGTERM
 
 version 0.1.x.y
--	dpending on the used OS some special modules are required
+-	depending on the used OS some special modules are required
 -	if the module can't be found a help function print_to_stdout is called
 
 version 0.2.x.y
@@ -31,15 +31,54 @@ version 0.4.x.y
 -	writing to log is available only, if the log path is given and valid
 -	cleaned up the project folder
 
+version 0.5.x.y
+-	general:
+	-	updated config file with a more cleaner description
+	-	added unit tests
+
+-	custom_media_player:
+	-	comes with a background thread to monitoring the USB device and also
+		reduce the CPU amount (usb_monitor.py)
+	-	USB detection checks for known OS has been removed
+	-	wmi module (Windows only) is no longer required
+	-	log creation has been moved into main
+	-	whenever the used USB device has been plugged off the current media player stops
+		and all remaining media files aren't going to play
+	-	fixed logical issues
+
+-	main:
+	-	configuration handling has been moved into an own file (config_settings.py)
+	-	updated arguments:
+		-	whenever more than 2 arguments are in use the help is going to print instead
+		-	fixed logical issues
+	-	updated helping functions
+	-	log creation starts now from main
+	-	in case of an error a message is going to print to stderr and the application
+		terminates with exit code 1
+
+-	logging_file:
+	-	instead of using the log path including the log file, which may also be just a path,
+		the path only is required; the log file is going to append automatically
+	-	the log file "media_player.log" is not part of the repository
+
+-	version_updater:
+	-	allows to read the current version file and incrementing the version(s) depending on decided opinion
+	-	writes the new version into the readme_updater (misc/readme_updater.py)
+
+-	readme_updater:
+	-	just update the readme file with the new version
+
+-	config settings:
+	-	outsourced from main
+	-	comes with additional functions and a better maintenance
+
+-	usb_monitor:
+	-	own thread to watch whenever an used USB device has suddenly been detached
+	-	if this event triggers, the player stops immediately
+
 ###########################
 #	ideas in the future
 ###########################
--	detection of a detached USB device shall be handled as an own thread,
-	because during runtime a music file can still be played when the USB device
-	has already been removed
-
 -	offering to set the volume
 
 -	offering to remote control by MQTT
-
--	create unit tests

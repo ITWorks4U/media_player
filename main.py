@@ -2,35 +2,34 @@
 #
 #	author:		ITWorks4U
 #	created:	July 20th, 2025
-#	updated:	July 21st, 2025
+#	updated:	July 24th, 2025
 #
 
 #	system modules
-import sys
-import platform
+from sys import argv, exit, stderr
 from signal import signal, SIGINT, SIGTERM
-import os
+from os.path import join, dirname
+from dataclasses import fields
 
 #	custom modules
 from custom_media_player import MediaPlayer, PLAYER_AVAILABLE
+from settings.config_settings import ConfigSettings
 from misc.signal_handling import handle_signal
+from misc.logging_file import RotatingFileLogging, logging
+from misc.version_updater import VersionUpdater
+from misc.readme_updater import update_readme
 
 #	---------------
 #	GLOBAL SETTINGS
 #	---------------
-#	config dictionary
-_config_settings: dict[str, str] = {}
-
 #	default config file name
-_default_config_file: str = os.path.join(os.path.dirname(__file__), "settings", "options.conf")
+_default_config_file: str = join(dirname(__file__), "settings", "options.conf")
 
 #	location of the version.ini file
-_version_file: str = os.path.join(os.path.dirname(__file__), "version.ini")
+_version_file: str = join(dirname(__file__), "version.ini")
 
-#	keys for config_settings dictionary
-_key_random_order = "play_in_random_order"
-_key_mount_point = "usb_mount_point"
-_key_operating_system = "os"
+#	instance to ConfigSettings class
+_settings: ConfigSettings = ConfigSettings()
 
 #	---------------
 #	FUNCTIONS
@@ -54,27 +53,32 @@ def print_help(own_file_name: str) -> None:
 	-----------------
 	usage: python[3|.exe] {own_file_name} [[-h | --help |/?] [-c | --create] [custom config file]]
 
-	> Displaying >>this<< help, when -h or --help or /? has been detected.
-	> This help is also going to print, if no USB mount point has been spotted.
+	> Displaying >>this<< help, when:
+	-h or --help or /? has been detected -OR-
+	using more than two arguments -OR-
+	using any other kind of argument(s)
+
 	> All arguments are optional.
 
 	-----------------
-	IMPORTANT:
+	NOTE:
 	> Depending on your used OS system, the log file path and also the mount point differs.
-	=> Take a look to the options.conf file, if existing.
+	> Take a look to the options.conf file.
+	> If this file might not exist, this can easily be created by using an the argument -c or --create.
 	-----------------
 
 	By default the options.conf file is going to load the settings to use. These are:
 	path_for_logging:
 	-	A path for logging. If nothing was given, no log will be used.
-	-	Make sure, that the path is valid, otherwise an error during runtime appears
-		and the error message is going to print to stdout.
+	-	use an absolute or relative path only
+	-	a file must not be appended, otherwise an error appears during runtime
+	-	the path must be valid, too
 
 	usb_mount_point:
 	-	A path for the USB device. Optionally, a local path can also be used.
-	-	If no input was given, then you're reading >>this<< output. ;-)
-	-	If the path is invalid, then an error during runtime appears and the error message
-		is going to print to stdout.
+	-	If no path has been detected, an error message will be printed to stderr
+		and the application is going to terminate with exit code 1
+	-	This path must also be valid.
 
 	play_in_random_order:
 	-	Offers to play the mp3 files in a random order, if set with true or True.
@@ -83,10 +87,8 @@ def print_help(own_file_name: str) -> None:
 
 	-----------------
 	IMPORTANT:
-	-	If the module pygame was not detected on your system, you should already seen the
-		error message on stdout. Make sure to install this module to listen to music.
-	
-		No audio will play.
+	-	If the module pygame was not detected on your system, a message is going to
+		print to stderr and the application will be termianted with exit code 1.
 	-----------------
 
 	arguments:
@@ -94,17 +96,18 @@ def print_help(own_file_name: str) -> None:
 	-	displaying >>this<< help and terminates the application with 0
 
 	[-c | --create]
-	-	If given, then a new options.conf is going to create without given settings.
+	-	if given, then a new options.conf is going to create without given settings
 	-	location of the config file: settings/options.conf
+	-	termiantes the application with exit code 0
+
 	-	ATTENTION: If this file already exists, this will be overwritten!
-	-	Finally, the application terminates in the normal way.
 
 	[custom config file]
 	-	Uses the custom config file to set up the player. Make sure, that the option keys
 		are identical, otherwise the application terminates with an error.
 	"""
 	print(summary)
-	sys.exit(0)
+	exit(0)
 #end function
 
 def create_config_file() -> None:
@@ -123,7 +126,9 @@ def create_config_file() -> None:
 ; config options for the music player
 
 ; ---------------
-; Given path for logging. Use an absolute path only.
+; Given path for logging. The path can be absolute or relative. Don't add a file
+; to the path, just the path for logging. The log file "media_player.log" will
+; automatically be appended to this path.
 ; If no logging path is given, no log is going to use.
 ; ---------------
 path_for_logging=
@@ -146,7 +151,7 @@ play_in_random_order="""
 	except IOError as e:
 		print(f"ERROR: unable to write data to {_default_config_file}: {e.args}")
 	finally:
-		sys.exit(0)
+		exit(0)
 	#end try
 #end function
 
@@ -170,7 +175,7 @@ def load_options(cfg_file: str = "") -> None:
 	"""
 	file_to_use: str = _default_config_file \
 		if cfg_file == "" \
-		else os.path.join(os.path.dirname(__file__), cfg_file)
+		else join(dirname(__file__), cfg_file)
 
 	try:
 		with open(file_to_use, encoding="latin-1") as src:
@@ -181,75 +186,145 @@ def load_options(cfg_file: str = "") -> None:
 				#end if
 
 				kvp = line.strip().split("=")
-				_config_settings[kvp[0]] = kvp[1]
+				_settings._settings[kvp[0]] = kvp[1]
 			#end for
 		#end with
 	except Exception as e:
 		if isinstance(e, IOError):
-			print(f"ERROR: ({_default_config_file}): {e.args}")
+			detailed_message = f"""
+			ERROR in file ({cfg_file if cfg_file != "" else _default_config_file}) detected:
+			{e.args}
+			"""
+
+			print(detailed_message, file=stderr)
 		else:
-			print(f"Common error detected: {e.args}")
+			print(f"ERROR: {e.args}", file=stderr)
 		#end if
 
-		sys.exit(1)
+		exit(1)
 	#end try
+#end function
 
-	return _config_settings
+def init_logging(destination_path: str) -> RotatingFileLogging:
+	"""
+	Initializing a logging system for the application. This works only,
+	if a log path has been given.
+
+	destination_path:
+	-	where the log file is going to write
+
+	returns:
+	-	used log handler
+	"""
+	log_handler: RotatingFileLogging = RotatingFileLogging(log_destination_path=destination_path)
+	formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+	log_handler.setFormatter(formatter)
+
+	logging.basicConfig(level=logging.DEBUG, handlers=[log_handler])
+
+	if False:
+		log_handler.test_logging()
+	#end if
+
+	return log_handler
+#end function
+
+def error_terminate(message: str) -> None:
+	"""
+	Print a message to stderr and terminate with exit code 1.
+
+	message:
+	-	the message to print
+	"""
+	print(f"ERROR: {message}", file=stderr)
+	exit(1)
 #end function
 
 def main() -> None:
 	signal(SIGINT, handle_signal)
 	signal(SIGTERM, handle_signal)
 
+	if False:
+		#	just for development
+		v: VersionUpdater = VersionUpdater.load_current_version(file_path=_version_file)
+		# v.bump_patch()
+		# v.bump_build()
+		v.update_version(_version_file)
+		update_readme(v)
+	#end if
+
+	#	---------------
+	#	check arguments
+	#	---------------
 	#	print help and terminate the application
-	if len(sys.argv) > 1 and sys.argv[1] in ["-h", "--help", "/?"]:
-		print_help(sys.argv[0])
+	#	also in use, when more than two arguments are given
+	on_help: bool = (
+		(len(argv) == 2 and argv[1] in ["-h", "--help", "/?"]) or
+		len(argv) > 2
+	)
+
+	if on_help:
+		print_help(argv[0])
 	#end if
 
 	#	create a new config file, which overwrites the existing config file,
 	#	if exists, and terminate the application
-	if len(sys.argv) > 1 and sys.argv[1] in ["-c", "--create"]:
+	if len(argv) == 2 and argv[1] in ["-c", "--create"]:
 		create_config_file()
 	#end if
 
+	if not PLAYER_AVAILABLE:
+		#	if the player module can't be found, print a message to stderr;
+		#	the application is going to terminate
+		error_terminate(message="No pygame module has been found. Terminating...")
+	#end if
+
+	#	---------------
 	#	loading options.conf or an alternative config file (argv[1]) and assign the values to the variables
 	#
 	#	If no logging path is given, no log is going to use.
 	#	If no mount point is given, the application is going to terminate with 0.
 	#	Playing the mp3 files in a random order, if given.
-	load_options(cfg_file=sys.argv[1] if len(sys.argv) > 1 else "")
+	#	---------------
+	load_options(cfg_file=argv[1] if len(argv) == 2 else "")
 
-	if not _key_random_order in _config_settings:
-		#	if this key might be missing, add this key
-		#	and set the value to False
-		_config_settings[_key_random_order] = False
+	#	---------------
+	#	if the mount point does not exists, then display a message to stderr
+	#	and termiante the application
+	#	---------------
+	if not _settings.on_existing_mount_point():
+		error_terminate(message="No mount path detected. Please update your config file.")
 	#end if
 
-	if not isinstance(_config_settings[_key_random_order], bool):
-		#	check, if the key for random order does not contain {True or False}
-		#	=> set to False 
-		_config_settings[_key_random_order] = False
-	elif _config_settings[_key_random_order] in ["true", "false"]:
-		#	set to True, if "true" has been detected
-		#	=> set to False, otherwise
-		_config_settings[_key_random_order] = True if "true" else False
+	#	---------------
+	#	check key for random order:
+	#	- key might not exist => set to False
+	#	- key is in ["true", "True", "false", "False"] => set certain value
+	#	- key contains anything => set to False
+	#	---------------
+	_settings.check_on_random_order()
+
+	#	---------------
+	#	check, if a log path has been detected; it not, then
+	#	nothing will be written into any log file
+	#	---------------
+	handler: RotatingFileLogging = None
+
+	if not _settings.on_existsing_log_path():
+		print("Info: No log output has been detected.")
+	else:
+		handler = init_logging(_settings.LogPath)
 	#end if
 
-	#	appending the current OS
-	_config_settings[_key_operating_system] = platform.system()
+	_settings.LogHandler = handler
 
-	if _config_settings[_key_mount_point] == "":
-		#	 no mount point has been spotted
-		#	=> display help and terminate the application
-		print_help(sys.argv[0])
-	#end if
+	#	filter the values for the media player only
+	detected_keys = {f.name for f in fields(MediaPlayer)}
+	new_kwargs = {k : v for k, v in _settings.ConfigStorage.items() if k in detected_keys}
 
-	if PLAYER_AVAILABLE:
-		mp = MediaPlayer(**_config_settings)
-		# print(mp)
-		mp.init_logging()
-		mp.play_audio_files()
-	#end if
+	mp = MediaPlayer(**new_kwargs)
+	# print(mp)
+	mp.play_audio_files()
 #end main
 
 if __name__ == "__main__":

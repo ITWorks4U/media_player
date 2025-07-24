@@ -3,6 +3,7 @@
 #
 #	author:		ITWorks4U
 #	created:	July 20th, 2025
+#	updated:	July 23rd, 2025
 #
 
 import logging
@@ -12,15 +13,15 @@ import os
 from misc.log_level import LogLevel
 
 class RotatingFileLogging(TimedRotatingFileHandler):
-	def __init__(self, file_name: str, when='D', interval=1, backup_count=7, max_bytes=10*1024*1024, encoding="latin-1") -> None:
+	def __init__(self, log_destination_path: str, when='D', interval=1, backup_count=7, max_bytes=10*1024*1024, encoding="latin-1") -> None:
 		"""
 		Initializing a new log record with presets. These presets are:
 		-	maximum storage duration of 7 days
 		-	size limitation of 10 MB
 		-	encoding is set to latin-1
 
-		file_name:
-		-	name of the current log record
+		log_destination_path:
+		-	where the log record shall be located
 
 		when:
 		-	when a rotation is planned to use
@@ -39,7 +40,9 @@ class RotatingFileLogging(TimedRotatingFileHandler):
 		encoding:
 		-	encoded format for log record
 		"""
-		super().__init__(filename=file_name, when=when, interval=interval, backupCount=backup_count, encoding=encoding)
+		full_path_name = os.path.join(log_destination_path, "media_player.log")
+
+		super().__init__(filename=full_path_name, when=when, interval=interval, backupCount=backup_count, encoding=encoding)
 		self.max_bytes = max_bytes
 	#end constructor
 
