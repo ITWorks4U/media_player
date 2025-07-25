@@ -76,6 +76,34 @@ version 0.5.x.y
 	-	own thread to watch whenever an used USB device has suddenly been detached
 	-	if this event triggers, the player stops immediately
 
+0.6.x.y
+-	.gitignore:
+	-	any kind of log file is now going to ignore for repository
+
+-	main:
+	-	moved create_config_file and also load_options to config_settings
+	-	by creation a log file this can fail, thus an error is going to print to stderr
+		followed by returning None for the log handler => identical to not to use any logging
+	-	if a config file was unable to create, the application is going to terminate with exit code 1
+	-	if the used config file was unable to load, the application is going to terminate with exit code 1
+
+config_settings:
+	-	now handles the config file; (internal or external) used
+	-	load_config_file returns True / False depending on certain conditions (True for success only)
+	-	create_config_file: like load_config_file
+	-	on_existing_mount_point, as well as, on_existing_log_path must satisfy several sub conditions to return True in summary
+
+config_settings:
+	-	...unit test for configuration file(s)...
+	-	moved from testing/ => testing/config_tests
+	-	handles with dummy config files, e. g. Windows, Linux, internal known config file, any external config file
+	-	extended tests
+
+log_testing:
+	-	...unit test for logging file(s)...
+	-	using the file rotation class instead of own written file handler
+		-	does not often rotate, when it should 
+
 ###########################
 #	ideas in the future
 ###########################

@@ -2,7 +2,7 @@
 #
 #	author:		ITWorks4U
 #	created:	July 20th, 2025
-#	updated:	July 24th, 2025
+#	updated:	July 25th, 2025
 #
 
 #	system modules
@@ -22,9 +22,6 @@ from misc.readme_updater import update_readme
 #	---------------
 #	GLOBAL SETTINGS
 #	---------------
-#	default config file name
-_default_config_file: str = join(dirname(__file__), "settings", "options.conf")
-
 #	location of the version.ini file
 _version_file: str = join(dirname(__file__), "version.ini")
 
@@ -110,105 +107,14 @@ def print_help(own_file_name: str) -> None:
 	exit(0)
 #end function
 
-def create_config_file() -> None:
-	"""
-	Create an empty config file and terminate the application with exit code 0.
-	If any error appers, usually IOError, the error message will be printed and
-	the application is also going to terminate with exit code 0.
-
-	---
-	**THIS OVERWRITES THE ALREADY EXISTING CONFIG FILE!**
-
-	---
-	"""
-
-	config_content = f"""
-; config options for the music player
-
-; ---------------
-; Given path for logging. The path can be absolute or relative. Don't add a file
-; to the path, just the path for logging. The log file "media_player.log" will
-; automatically be appended to this path.
-; If no logging path is given, no log is going to use.
-; ---------------
-path_for_logging=
-
-; ---------------
-; Mount point for the USB device. Can also be a local path, when no USB device is in use.
-; If no mount point is given, no action is going to do.
-; ---------------
-usb_mount_point=
-
-; ---------------
-; Play the detected mp3 files in a random order, if the value is set to true or True.
-; If no value is given or differs to {{true, True, false, False}}, then false is set by default.
-; ---------------
-play_in_random_order="""
-	try:
-		with open(_default_config_file, mode="w", encoding="latin-1") as dest:
-			_ = dest.write(config_content)
-		#end with
-	except IOError as e:
-		print(f"ERROR: unable to write data to {_default_config_file}: {e.args}")
-	finally:
-		exit(0)
-	#end try
-#end function
-
-def load_options(cfg_file: str = "") -> None:
-	"""
-	Load the options.conf file, if existing. If this file does not exist, or
-	any other IOError or any general exception appears, the current message will
-	be printed to stdout followed by application termination with 1.
-
-	By default the options.conf, located in settings/, contains all required data
-	to work with.
-
-	---
-	*If you're using a **custom** config file, then make sure, that the expected **keywords**
-	in the config file **exists**!*
-
-	---
-	cfg_file:
-	-	use an own custom config file, if given
-	-	defaults to an empty string
-	"""
-	file_to_use: str = _default_config_file \
-		if cfg_file == "" \
-		else join(dirname(__file__), cfg_file)
-
-	try:
-		with open(file_to_use, encoding="latin-1") as src:
-			for line in src.readlines():
-				#	skip every empty line and commentary
-				if line in ["", "\n", "\r\n", "\r"] or line.startswith(";"):
-					continue
-				#end if
-
-				kvp = line.strip().split("=")
-				_settings._settings[kvp[0]] = kvp[1]
-			#end for
-		#end with
-	except Exception as e:
-		if isinstance(e, IOError):
-			detailed_message = f"""
-			ERROR in file ({cfg_file if cfg_file != "" else _default_config_file}) detected:
-			{e.args}
-			"""
-
-			print(detailed_message, file=stderr)
-		else:
-			print(f"ERROR: {e.args}", file=stderr)
-		#end if
-
-		exit(1)
-	#end try
-#end function
-
 def init_logging(destination_path: str) -> RotatingFileLogging:
 	"""
 	Initializing a logging system for the application. This works only,
 	if a log path has been given.
+
+	If the log file can't be created, because insufficient permissions were
+	detected, the path is invalid, not existing, ..., the error message
+	is going to print to stderr followed by returning None for logging.
 
 	destination_path:
 	-	where the log file is going to write
@@ -216,15 +122,22 @@ def init_logging(destination_path: str) -> RotatingFileLogging:
 	returns:
 	-	used log handler
 	"""
-	log_handler: RotatingFileLogging = RotatingFileLogging(log_destination_path=destination_path)
-	formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-	log_handler.setFormatter(formatter)
+	log_handler: RotatingFileLogging = None
+	
+	try:
+		log_handler = RotatingFileLogging(log_destination_path=destination_path)
+		formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+		log_handler.setFormatter(formatter)
 
-	logging.basicConfig(level=logging.DEBUG, handlers=[log_handler])
-
-	if False:
-		log_handler.test_logging()
-	#end if
+		logging.basicConfig(level=logging.DEBUG, handlers=[log_handler])
+	except Exception as e:
+		#	any kind of exception is going to print to stderr
+		detailed_message = f"""
+{type(e)} for writing into config file {destination_path} detected:
+{e.args}
+"""
+		print(detailed_message, file=stderr)
+	#end try
 
 	return log_handler
 #end function
@@ -247,6 +160,7 @@ def main() -> None:
 	if False:
 		#	just for development
 		v: VersionUpdater = VersionUpdater.load_current_version(file_path=_version_file)
+		# v.bump_minor()
 		# v.bump_patch()
 		# v.bump_build()
 		v.update_version(_version_file)
@@ -270,7 +184,8 @@ def main() -> None:
 	#	create a new config file, which overwrites the existing config file,
 	#	if exists, and terminate the application
 	if len(argv) == 2 and argv[1] in ["-c", "--create"]:
-		create_config_file()
+		ret_state: bool = _settings.create_config_file()
+		exit(0 if ret_state == True else 1)
 	#end if
 
 	if not PLAYER_AVAILABLE:
@@ -286,7 +201,11 @@ def main() -> None:
 	#	If no mount point is given, the application is going to terminate with 0.
 	#	Playing the mp3 files in a random order, if given.
 	#	---------------
-	load_options(cfg_file=argv[1] if len(argv) == 2 else "")
+	if not _settings.load_config_file(cfg_file=argv[1] if len(argv) == 2 else ""):
+		#	in case of False returned an error message has already been printed
+		#	to stderr and this application is going to terminate with exit code 1
+		exit(1)
+	#end if
 
 	#	---------------
 	#	if the mount point does not exists, then display a message to stderr
@@ -304,6 +223,10 @@ def main() -> None:
 	#	---------------
 	_settings.check_on_random_order()
 
+	#	filter the values for the media player only
+	detected_keys = {f.name for f in fields(MediaPlayer)}
+	new_kwargs = {k : v for k, v in _settings.ConfigStorage.items() if k in detected_keys}
+
 	#	---------------
 	#	check, if a log path has been detected; it not, then
 	#	nothing will be written into any log file
@@ -315,12 +238,7 @@ def main() -> None:
 	else:
 		handler = init_logging(_settings.LogPath)
 	#end if
-
-	_settings.LogHandler = handler
-
-	#	filter the values for the media player only
-	detected_keys = {f.name for f in fields(MediaPlayer)}
-	new_kwargs = {k : v for k, v in _settings.ConfigStorage.items() if k in detected_keys}
+	new_kwargs["log_handler"] = handler
 
 	mp = MediaPlayer(**new_kwargs)
 	# print(mp)

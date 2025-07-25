@@ -1,7 +1,7 @@
 #   Media Player
 
 -   author: ITWorks4U
--   current version:    *0.5.12.5*
+-   current version:    *0.6.0.0*
 -   written with Python3 (at least with version 3.11.5) for Windows as well as or UNIX/Linux and macOS (expected)
 
 ### table of content
