@@ -2,6 +2,7 @@
 #
 #	author:		ITWorks4U
 #	created:	July 25th, 2025
+#	updated:	July 26th, 2025
 #
 
 import unittest as ut
@@ -16,7 +17,6 @@ from logging.handlers import RotatingFileHandler
 class LogTesting(ut.TestCase):
 	def setUp(self) -> None:
 		self.cs: ConfigSettings = ConfigSettings()
-		self.log_handler: RotatingFileHandler
 		self._detected_os = system()
 
 		if self._detected_os == "Windows":
@@ -27,6 +27,10 @@ class LogTesting(ut.TestCase):
 			self.cfg_file = join(Path(__file__).resolve().parents[1], "config_tests", "dummy_linux.conf")
 		#end if
 
+		#NOTE:
+		#	10MB file size
+		#	keep up to 10 files
+		#	encoding is set to "latin-1"
 		self._arguments = {}
 		self._arguments["maxBytes"] = 10*10*1024
 		self._arguments["backupCount"] = 10
@@ -35,12 +39,15 @@ class LogTesting(ut.TestCase):
 
 	def tearDown(self) -> None:
 		self.cs = None
-		self.log_handler = None
 	#end teardown
 
 	def get_config_path(self) -> str:
 		self.cs.load_config_file(self.cfg_file)
-		self.assertTrue(self.cs.on_existsing_log_path(), msg="Usually, a log path shall be there...")
+
+		if self._detected_os == "Windows":
+			#NOTE:	assertion failure for /dev/null (Linux/macOS)
+			self.assertTrue(self.cs.on_existsing_log_path(), msg="Usually, a log path shall be there...")
+		#end if
 
 		return join(self.cs.LogPath, "test.log")
 	#end method
@@ -57,31 +64,39 @@ class LogTesting(ut.TestCase):
 		#	are given, e. g. Windows <=> C:\, Linux <=> /dev/null
 		#	this log file can't be created
 		log_destination_path = self.get_config_path()
+
+		#NOTE:
+		#	for Linux/macOS: /dev/null is a "valid path", when the assertion
+		#	in get_config_path has been skipped
 		self.assertIsNot(log_destination_path, None, msg="The log destination path shall be able to use...")
+		self._arguments["filename"] = log_destination_path
+
+		#NOTE:
+		#	Windows:	In C:\ drive usually it's not able to crate a log file there.
+		#	Linux:		/dev/null raises a NotADirectoryError instead
 
 		if self._detected_os == "Windows":
-			#NOTE:	In C:\ drive usually it's not able to crate a log file there. 
-			self._arguments["filename"] = log_destination_path
-
 			with self.assertRaises(PermissionError):
-				self.log_handler = RotatingFileHandler(**self._arguments)
+				_ = RotatingFileHandler(**self._arguments)
 			#end with
 		else:
-			#TODO:	Check, how /dev/null would looks like for Linux / macOS
-			pass
+			with self.assertRaises(NotADirectoryError):
+				_ = RotatingFileHandler(**self._arguments)
+			#end with
 		#end if
 	#end test
 
+	#NOTE:	No need to run this test over and over again.
+	@ut.skip
 	def test_2_successfully_create_log_file(self) -> None:
 		#	Use this current path instead to create a log file.
 		self._arguments["filename"] = join(dirname(__file__), "test.log")
 
-		self.log_handler = RotatingFileHandler(**self._arguments)
+		log_handler: RotatingFileHandler = RotatingFileHandler(**self._arguments)
 		formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-		self.log_handler.setFormatter(formatter)
+		log_handler.setFormatter(formatter)
 
-		logging.basicConfig(level=logging.DEBUG, handlers=[self.log_handler])
-		# self.log_handler.test_logging()
+		logging.basicConfig(level=logging.DEBUG, handlers=[log_handler])
 
 		for i in range(500000):
 			logging.debug(f"log message #{i}")
